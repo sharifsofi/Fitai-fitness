@@ -1,0 +1,104 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>FitAI</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light dark;--bg:#f6f7f9;--card:#fff;--tx:#14181f;--mu:#667085;--bd:#e4e7ec;--ac:#16a34a;--bl:#2563eb;--in:#f2f4f7}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1116;--card:#171b22;--tx:#eef1f5;--mu:#98a2b3;--bd:#272d38;--ac:#22c55e;--bl:#60a5fa;--in:#0e1116}}
+:root[data-theme="dark"]{--bg:#0e1116;--card:#171b22;--tx:#eef1f5;--mu:#98a2b3;--bd:#272d38;--ac:#22c55e;--bl:#60a5fa;--in:#0e1116}
+*{box-sizing:border-box}html,body{margin:0}body{background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-bottom:70px}
+main{max-width:720px;margin:0 auto;padding:14px}h1{font-size:20px;margin:4px 0 12px}h2{font-size:16px;margin:0 0 10px}
+.c{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin-bottom:12px}
+.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}.r{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+input,select,textarea{background:var(--in);color:var(--tx);border:1px solid var(--bd);border-radius:10px;padding:9px;font:inherit;width:100%}
+label{font-size:12px;color:var(--mu);display:block}
+button{background:var(--ac);color:#fff;border:0;border-radius:10px;padding:9px 14px;font:inherit;font-weight:600;cursor:pointer}button.s{background:var(--in);color:var(--tx);border:1px solid var(--bd)}button.x{background:none;color:var(--mu);padding:2px 8px}button:disabled{opacity:.5}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--bd);padding-bottom:env(safe-area-inset-bottom,0px)}
+nav button{flex:1;background:none;color:var(--mu);border-radius:0;padding:12px 2px;font-size:12px}nav button.on{color:var(--ac)}
+.big{font-size:26px;font-weight:700}.mu{color:var(--mu);font-size:13px}.bar{height:9px;border-radius:5px;background:var(--in);overflow:hidden;margin:4px 0 10px}.bar i{display:block;height:100%;background:var(--ac)}
+.row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-top:1px solid var(--bd)}.row:first-of-type{border-top:0}
+.ov{overflow-x:auto}.tag{display:inline-block;background:var(--in);border-radius:8px;padding:2px 8px;font-size:12px;margin:2px 4px 2px 0}
+</style><link rel="manifest" href="manifest.webmanifest"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="FitAI"><meta name="theme-color" content="#16a34a"></head><body><main id="app"></main>
+<nav id="nav"></nav>
+<script>
+const K="fitai_v1",$=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const today=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
+let S={p:{sex:"m",age:30,h:175,w:75,act:1.55,goal:"maintain",days:4,equip:"Full gym",exp:"Beginner"},food:{},wk:[],wt:[],plan:null};
+try{const x=localStorage.getItem(K);if(x)S=Object.assign(S,JSON.parse(x))}catch(e){}
+const save=()=>{try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}};
+let tab="home",day=today(),draft=[],busy="",msg="",sample=null;
+(async()=>{try{sample=await claude.use("sample")}catch(e){}render()})();
+function calc(){const p=S.p,bmr=10*p.w+6.25*p.h-5*p.age+(p.sex=="m"?5:-161),tdee=Math.round(bmr*p.act);
+let t=p.goal=="lose"?tdee-500:p.goal=="gain"?tdee+300:tdee;t=Math.max(t,p.sex=="m"?1500:1200);
+const pr=Math.round(p.w*(p.goal=="lose"?2.2:1.8)),fa=Math.round(t*.25/9),ca=Math.max(0,Math.round((t-pr*4-fa*9)/4));return{bmr:Math.round(bmr),tdee,t,pr,fa,ca}}
+const items=d=>S.food[d]||[];
+const sum=d=>items(d).reduce((a,i)=>({k:a.k+i.k,p:a.p+i.p,c:a.c+i.c,f:a.f+i.f}),{k:0,p:0,c:0,f:0});
+const vol=w=>w.ex.reduce((a,e)=>a+e.s*e.r*e.w,0);
+function go(t){tab=t;msg="";render()}
+function bar(v,m){return `<div class="bar"><i style="width:${Math.min(100,m?v/m*100:0)}%"></i></div>`}
+function streak(){const ds=new Set(S.wk.map(w=>w.date));let n=0,d=new Date();if(!ds.has(today()))d.setDate(d.getDate()-1);
+for(;;){const k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");if(ds.has(k)){n++;d.setDate(d.getDate()-1)}else break}return n}
+function home(){const c=calc(),s=sum(today());
+let wk7="",mx=c.t;const days=[...Array(7)].map((_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);return d});
+const bars=days.map(d=>{const k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");return{k,v:sum(k).k,l:"SMTWTFS"[d.getDay()]}});
+mx=Math.max(mx,...bars.map(b=>b.v));
+wk7=`<svg viewBox="0 0 280 90" width="100%">${bars.map((b,i)=>{const h=b.v/mx*60;return `<rect x="${i*40+8}" y="${68-h}" width="24" height="${h}" rx="5" fill="var(--ac)" opacity="${b.v?1:.2}"/><text x="${i*40+20}" y="84" text-anchor="middle" font-size="10" fill="var(--mu)">${b.l}</text>`}).join("")}<line x1="0" x2="280" y1="${68-c.t/mx*60}" y2="${68-c.t/mx*60}" stroke="var(--bl)" stroke-dasharray="4"/></svg>`;
+const lw=S.wt.length?S.wt[S.wt.length-1].kg:S.p.w,tw=S.wk.filter(w=>w.date==today());
+return `<h1>Today</h1><div class="c"><div class="mu">Calories</div><div class="big">${Math.round(s.k)} <span class="mu">/ ${c.t} kcal</span></div>${bar(s.k,c.t)}
+<div class="g"><div><div class="mu">Protein ${Math.round(s.p)}/${c.pr}g</div>${bar(s.p,c.pr)}</div><div><div class="mu">Carbs ${Math.round(s.c)}/${c.ca}g</div>${bar(s.c,c.ca)}</div><div><div class="mu">Fat ${Math.round(s.f)}/${c.fa}g</div>${bar(s.f,c.fa)}</div></div>
+<div class="mu">Remaining: ${c.t-Math.round(s.k)} kcal</div></div>
+<div class="g"><div class="c"><div class="mu">Weight</div><div class="big">${lw}kg</div></div><div class="c"><div class="mu">Streak</div><div class="big">${streak()}d</div></div><div class="c"><div class="mu">Workouts today</div><div class="big">${tw.length}</div></div></div>
+<div class="c"><h2>Last 7 days (kcal)</h2>${wk7}<div class="mu">Dashed line = your target</div></div>
+<div class="r"><button onclick="go('food')">+ Log food</button><button class="s" onclick="go('wk')">+ Log workout</button><button class="s" onclick="go('coach')">AI coach</button></div>`}
+function food(){const s=sum(day);return `<h1>Food log</h1><div class="c"><label>Date</label><input type="date" value="${day}" onchange="day=this.value||today();render()">
+<div class="mu" style="margin-top:8px">${Math.round(s.k)} kcal · P ${Math.round(s.p)} · C ${Math.round(s.c)} · F ${Math.round(s.f)}</div></div>
+<div class="c"><h2>Add food</h2><label>Food (describe it for AI estimate)</label><input id="fn" placeholder="e.g. 2 eggs and toast with butter">
+<div class="g" style="margin:8px 0"><div><label>kcal</label><input id="fk" type="number"></div><div><label>Protein g</label><input id="fp" type="number"></div><div><label>Carbs g</label><input id="fc" type="number"></div><div><label>Fat g</label><input id="ff" type="number"></div></div>
+<div class="r"><button onclick="addFood()">Add</button><button class="s" ${sample?"":"disabled"} onclick="estFood()">${busy=="est"?"Estimating…":"✨ AI estimate"}</button></div><div class="mu">${esc(msg)}</div></div>
+<div class="c"><h2>Entries</h2>${items(day).map((i,x)=>`<div class="row"><div>${esc(i.n)}<div class="mu">${i.k} kcal · P${i.p} C${i.c} F${i.f}</div></div><button class="x" onclick="delFood(${x})">✕</button></div>`).join("")||'<div class="mu">Nothing logged.</div>'}</div>`}
+const num=id=>parseFloat($(id).value)||0;
+function addFood(){const n=$("fn").value.trim();if(!n)return;(S.food[day]=S.food[day]||[]).push({n,k:num("fk"),p:num("fp"),c:num("fc"),f:num("ff")});save();render()}
+function delFood(i){S.food[day].splice(i,1);save();render()}
+async function estFood(){const n=$("fn").value.trim();if(!n){msg="Describe the food first.";return render()}busy="est";msg="";render();
+try{const r=await sample.json('Estimate nutrition for this meal: "'+n+'". Reply ONLY JSON: {"kcal":number,"protein":number,"carbs":number,"fat":number} (grams, whole numbers, reasonable portion if unspecified).');
+S.food[day]=S.food[day]||[];S.food[day].push({n,k:Math.round(r.kcal),p:Math.round(r.protein),c:Math.round(r.carbs),f:Math.round(r.fat)});save()}catch(e){msg="AI estimate failed: "+(e.message||e.code||"error")}busy="";render()}
+function wk(){return `<h1>Workouts</h1>${S.plan?`<div class="c"><h2>Start from your AI plan</h2><div class="r">${S.plan.days.map((d,i)=>`<button class="s" onclick="loadDay(${i})">${esc(d.day)}</button>`).join("")}</div></div>`:""}
+<div class="c"><h2>Current session</h2><label>Session name</label><input id="wn" value="${esc(window.wname||"")}" placeholder="Push day" oninput="window.wname=this.value">
+${draft.map((e,i)=>`<div class="row"><div>${esc(e.n)}<div class="mu">${e.s} × ${e.r} @ ${e.w}kg</div></div><button class="x" onclick="draft.splice(${i},1);render()">✕</button></div>`).join("")}
+<div class="g" style="margin-top:8px"><div style="grid-column:span 2"><label>Exercise</label><input id="en"></div><div><label>Sets</label><input id="es" type="number" value="3"></div><div><label>Reps</label><input id="er" type="number" value="10"></div><div><label>Kg</label><input id="ew" type="number" value="0"></div></div>
+<div class="r" style="margin-top:8px"><button class="s" onclick="addEx()">+ Exercise</button><button onclick="saveWk()">Finish & save</button></div></div>
+<div class="c"><h2>History</h2>${[...S.wk].reverse().slice(0,30).map(w=>`<div class="row"><div>${esc(w.name||"Workout")}<div class="mu">${w.date} · ${w.ex.length} exercises · ${Math.round(vol(w))} kg volume</div></div><button class="x" onclick="delWk(${w.id})">✕</button></div>`).join("")||'<div class="mu">No workouts yet.</div>'}</div>`}
+function addEx(){const n=$("en").value.trim();if(!n)return;draft.push({n,s:num("es")||1,r:num("er")||1,w:num("ew")});render()}
+function saveWk(){if(!draft.length)return;S.wk.push({id:Date.now(),date:today(),name:$("wn").value.trim()||"Workout",ex:draft});draft=[];window.wname="";save();tab="prog";render()}
+function delWk(id){S.wk=S.wk.filter(w=>w.id!=id);save();render()}
+function loadDay(i){const d=S.plan.days[i];window.wname=d.day+" – "+d.focus;draft=d.exercises.map(e=>({n:e.name,s:e.sets||3,r:parseInt(e.reps)||10,w:0}));render()}
+function prog(){const pts=S.wt;let ch='<div class="mu">Log your weight to see the trend.</div>';
+if(pts.length>1){const v=pts.map(p=>p.kg),mn=Math.min(...v)-1,mx=Math.max(...v)+1,X=i=>10+i/(pts.length-1)*280,Y=k=>110-(k-mn)/(mx-mn)*100;
+ch=`<svg viewBox="0 0 300 120" width="100%"><polyline fill="none" stroke="var(--ac)" stroke-width="2.5" points="${pts.map((p,i)=>X(i)+","+Y(p.kg)).join(" ")}"/>${pts.map((p,i)=>`<circle cx="${X(i)}" cy="${Y(p.kg)}" r="3" fill="var(--ac)"/>`).join("")}<text x="10" y="12" font-size="10" fill="var(--mu)">${mx.toFixed(1)}</text><text x="10" y="118" font-size="10" fill="var(--mu)">${mn.toFixed(1)}</text></svg><div class="mu">Change: ${(v[v.length-1]-v[0]).toFixed(1)} kg since ${pts[0].date}</div>`}
+const best={};S.wk.forEach(w=>w.ex.forEach(e=>{const k=e.n.toLowerCase();if(!best[k]||e.w>best[k].w)best[k]={n:e.n,w:e.w,r:e.r}}));
+const wkc={};S.wk.forEach(w=>{const d=new Date(w.date+"T00:00");d.setDate(d.getDate()-d.getDay());const k=d.toISOString().slice(0,10);wkc[k]=(wkc[k]||0)+1});
+return `<h1>Progress</h1><div class="c"><h2>Body weight</h2><div class="r"><input id="bw" type="number" step="0.1" placeholder="kg" style="width:110px"><button onclick="addW()">Log</button></div>${ch}</div>
+<div class="g"><div class="c"><div class="mu">Total workouts</div><div class="big">${S.wk.length}</div></div><div class="c"><div class="mu">Total volume</div><div class="big">${Math.round(S.wk.reduce((a,w)=>a+vol(w),0)/1000)}t</div></div><div class="c"><div class="mu">Streak</div><div class="big">${streak()}d</div></div></div>
+<div class="c"><h2>Personal records</h2>${Object.values(best).sort((a,b)=>b.w-a.w).slice(0,8).map(b=>`<div class="row"><span>${esc(b.n)}</span><b>${b.w} kg × ${b.r}</b></div>`).join("")||'<div class="mu">Log workouts to see PRs.</div>'}</div>
+<div class="c"><h2>Workouts per week</h2>${Object.entries(wkc).slice(-8).map(([k,v])=>`<div class="mu">Week of ${k} · ${v}</div>${bar(v,S.p.days)}`).join("")||'<div class="mu">No data yet.</div>'}</div>`}
+function addW(){const kg=num("bw");if(!kg)return;S.wt=S.wt.filter(w=>w.date!=today());S.wt.push({date:today(),kg});S.wt.sort((a,b)=>a.date<b.date?-1:1);S.p.w=kg;save();render()}
+function coach(){const p=S.p,c=calc(),o=(v,t)=>`<option value="${v}" ${p.act==v||p.goal==v||p.sex==v?"selected":""}>${t}</option>`;
+return `<h1>AI coach</h1><div class="c"><h2>Your profile</h2><div class="g">
+<div><label>Sex</label><select id="ps">${o("m","Male")}${o("f","Female")}</select></div><div><label>Age</label><input id="pa" type="number" value="${p.age}"></div><div><label>Height cm</label><input id="ph" type="number" value="${p.h}"></div><div><label>Weight kg</label><input id="pw" type="number" step="0.1" value="${p.w}"></div>
+<div><label>Activity</label><select id="pc">${o(1.2,"Sedentary")}${o(1.375,"Light")}${o(1.55,"Moderate")}${o(1.725,"Very active")}</select></div>
+<div><label>Goal</label><select id="pg">${o("lose","Lose fat")}${o("maintain","Maintain")}${o("gain","Build muscle")}</select></div>
+<div><label>Days/week</label><input id="pd" type="number" min="1" max="7" value="${p.days}"></div><div><label>Equipment</label><select id="pe">${["Full gym","Dumbbells only","Bodyweight only","Home gym"].map(x=>`<option ${p.equip==x?"selected":""}>${x}</option>`).join("")}</select></div>
+<div><label>Experience</label><select id="px">${["Beginner","Intermediate","Advanced"].map(x=>`<option ${p.exp==x?"selected":""}>${x}</option>`).join("")}</select></div></div>
+<div class="r" style="margin-top:10px"><button onclick="saveP()">Save profile</button></div></div>
+<div class="c"><h2>Your numbers</h2><div class="g"><div><div class="mu">BMR</div><div class="big">${c.bmr}</div></div><div><div class="mu">TDEE</div><div class="big">${c.tdee}</div></div><div><div class="mu">Daily target</div><div class="big">${c.t}</div></div></div>
+<div class="mu" style="margin-top:6px">Macros: ${c.pr}g protein · ${c.ca}g carbs · ${c.fa}g fat</div></div>
+<div class="c"><h2>Generate workout plan</h2><label>Extra notes (injuries, preferences)</label><textarea id="pn" rows="2"></textarea>
+<div class="r" style="margin-top:8px"><button ${sample&&!busy?"":"disabled"} onclick="genPlan()">${busy=="plan"?"Building…":"✨ Build my plan"}</button></div><div class="mu">${sample?"":"AI unavailable in this view."} ${esc(msg)}</div></div>
+${S.plan?`<div class="c"><h2>${esc(S.plan.name)}</h2><div class="mu">${esc(S.plan.notes)}</div>${S.plan.days.map(d=>`<div class="row" style="display:block"><b>${esc(d.day)} – ${esc(d.focus)}</b><div>${d.exercises.map(e=>`<span class="tag">${esc(e.name)} ${esc(e.sets)}×${esc(e.reps)}</span>`).join("")}</div></div>`).join("")}</div>`:""}`}
+function saveP(){const p=S.p;p.sex=$("ps").value;p.age=num("pa")||30;p.h=num("ph")||175;p.w=num("pw")||75;p.act=parseFloat($("pc").value);p.goal=$("pg").value;p.days=num("pd")||4;p.equip=$("pe").value;p.exp=$("px").value;save();render()}
+async function genPlan(){saveP();const p=S.p,c=calc();busy="plan";msg="";render();
+try{const r=await sample.json(`You are a certified strength coach. Build a ${p.days}-day/week weekly workout plan. Client: ${p.sex=="m"?"male":"female"}, ${p.age}y, ${p.h}cm, ${p.w}kg, goal: ${p.goal} (TDEE ${c.tdee} kcal, target ${c.t} kcal), experience: ${p.exp}, equipment: ${p.equip}. Notes: ${$("pn")?.value||"none"}. Include 4-7 exercises per day. Reply ONLY JSON: {"name":string,"notes":string (2 sentences on progression and cardio/nutrition fit),"days":[{"day":"Day 1","focus":string,"exercises":[{"name":string,"sets":number,"reps":string}]}]}`,{modelTier:"default"});
+if(!r.days?.length)throw new Error("Bad plan");S.plan=r;save()}catch(e){msg="Failed: "+(e.message||e.code||"error")}busy="";render()}
+function render(){const a=document.activeElement;if(a&&a.id&&/^p[a-z]$/.test(a.id)&&0)return;
+$("app").innerHTML={home,food,wk,prog,coach}[tab]();
+$("nav").innerHTML=[["home","🏠","Home"],["food","🍎","Food"],["wk","🏋️","Workout"],["prog","📈","Progress"],["coach","✨","Coach"]].map(t=>`<button class="${tab==t[0]?"on":""}" onclick="go('${t[0]}')"><div style="font-size:18px">${t[1]}</div>${t[2]}</button>`).join("")}
+render();
+</script><script>if ("serviceWorker" in navigator) { window.addEventListener("load", () => navigator.serviceWorker.register("./service-worker.js").catch(() => {})); }</script></body></html>
