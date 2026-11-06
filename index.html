@@ -19,13 +19,58 @@ nav button{flex:1;background:none;color:var(--mu);border-radius:0;padding:12px 2
 <nav id="nav"></nav>
 <script>
 const K="fitai_v1",$=id=>document.getElementById(id);
+const FITAI_API_URL = "https://broken-recipe-eed4.sharifsofi185.workers.dev";
+
+async function askFitAI(message) {
+  const response = await fetch(FITAI_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ message })
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data.error?.message || data.message || "AI request failed"
+    );
+  }
+
+  const answer = data.candidates?.[0]?.content?.parts
+    ?.map(part => part.text || "")
+    .join("\n")
+    .trim();
+
+  if (!answer) {
+    throw new Error("FitAI received an empty AI response.");
+  }
+
+  return answer;
+}
+
+function extractAIJson(text) {
+  const cleaned = text
+    .replace(/```json/gi, "")
+    .replace(/```/g, "")
+    .trim();
+
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+
+  if (start === -1 || end === -1) {
+    throw new Error("AI did not return valid JSON.");
+  }
+
+  return JSON.parse(cleaned.slice(start, end + 1));
+}
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const today=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
 let S={p:{sex:"m",age:30,h:175,w:75,act:1.55,goal:"maintain",days:4,equip:"Full gym",exp:"Beginner"},food:{},wk:[],wt:[],plan:null};
 try{const x=localStorage.getItem(K);if(x)S=Object.assign(S,JSON.parse(x))}catch(e){}
 const save=()=>{try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}};
-let tab="home",day=today(),draft=[],busy="",msg="",sample=null;
-(async()=>{try{sample=await claude.use("sample")}catch(e){}render()})();
+let tab="home",day=today(),draft=[],busy="",msg="";
 function calc(){const p=S.p,bmr=10*p.w+6.25*p.h-5*p.age+(p.sex=="m"?5:-161),tdee=Math.round(bmr*p.act);
 let t=p.goal=="lose"?tdee-500:p.goal=="gain"?tdee+300:tdee;t=Math.max(t,p.sex=="m"?1500:1200);
 const pr=Math.round(p.w*(p.goal=="lose"?2.2:1.8)),fa=Math.round(t*.25/9),ca=Math.max(0,Math.round((t-pr*4-fa*9)/4));return{bmr:Math.round(bmr),tdee,t,pr,fa,ca}}
@@ -52,14 +97,62 @@ function food(){const s=sum(day);return `<h1>Food log</h1><div class="c"><label>
 <div class="mu" style="margin-top:8px">${Math.round(s.k)} kcal · P ${Math.round(s.p)} · C ${Math.round(s.c)} · F ${Math.round(s.f)}</div></div>
 <div class="c"><h2>Add food</h2><label>Food (describe it for AI estimate)</label><input id="fn" placeholder="e.g. 2 eggs and toast with butter">
 <div class="g" style="margin:8px 0"><div><label>kcal</label><input id="fk" type="number"></div><div><label>Protein g</label><input id="fp" type="number"></div><div><label>Carbs g</label><input id="fc" type="number"></div><div><label>Fat g</label><input id="ff" type="number"></div></div>
-<div class="r"><button onclick="addFood()">Add</button><button class="s" ${sample?"":"disabled"} onclick="estFood()">${busy=="est"?"Estimating…":"✨ AI estimate"}</button></div><div class="mu">${esc(msg)}</div></div>
-<div class="c"><h2>Entries</h2>${items(day).map((i,x)=>`<div class="row"><div>${esc(i.n)}<div class="mu">${i.k} kcal · P${i.p} C${i.c} F${i.f}</div></div><button class="x" onclick="delFood(${x})">✕</button></div>`).join("")||'<div class="mu">Nothing logged.</div>'}</div>`}
+<div class="r" style="margin-top:8px">
+<button onclick="addFood()">Add</button>
+<button class="s" ${busy?"disabled":""} onclick="estFood()">${busy=="est"?"Estimating…":"✨ AI estimate"}</button>
+</div>
+<div class="mu">${esc(msg)}</div></div><div class="c"><h2>Entries</h2>${items(day).map((i,x)=>`<div class="row"><div>${esc(i.n)}<div class="mu">${i.k} kcal · P${i.p} C${i.c} F${i.f}</div></div><button class="x" onclick="delFood(${x})">✕</button></div>`).join("")||'<div class="mu">Nothing logged.</div>'}</div>`}
 const num=id=>parseFloat($(id).value)||0;
 function addFood(){const n=$("fn").value.trim();if(!n)return;(S.food[day]=S.food[day]||[]).push({n,k:num("fk"),p:num("fp"),c:num("fc"),f:num("ff")});save();render()}
 function delFood(i){S.food[day].splice(i,1);save();render()}
-async function estFood(){const n=$("fn").value.trim();if(!n){msg="Describe the food first.";return render()}busy="est";msg="";render();
-try{const r=await sample.json('Estimate nutrition for this meal: "'+n+'". Reply ONLY JSON: {"kcal":number,"protein":number,"carbs":number,"fat":number} (grams, whole numbers, reasonable portion if unspecified).');
-S.food[day]=S.food[day]||[];S.food[day].push({n,k:Math.round(r.kcal),p:Math.round(r.protein),c:Math.round(r.carbs),f:Math.round(r.fat)});save()}catch(e){msg="AI estimate failed: "+(e.message||e.code||"error")}busy="";render()}
+async function estFood() {
+  const n = $("fn").value.trim();
+
+  if (!n) {
+    msg = "Describe the food first.";
+    return render();
+  }
+
+  busy = "est";
+  msg = "";
+  render();
+
+  try {
+    const response = await askFitAI(
+      'Estimate the nutrition for this meal: "' + n + '". ' +
+      'Assume a reasonable serving if quantity is not specified. ' +
+      'Reply ONLY with valid JSON, no markdown: ' +
+      '{"kcal":number,"protein":number,"carbs":number,"fat":number}. ' +
+      'All macros must be in grams.'
+    );
+
+    const r = extractAIJson(response);
+
+    const values = [r.kcal, r.protein, r.carbs, r.fat];
+
+    if (!values.every(v => Number.isFinite(Number(v)) && Number(v) >= 0)) {
+      throw new Error("Invalid nutrition values returned by AI.");
+    }
+
+    S.food[day] = S.food[day] || [];
+
+    S.food[day].push({
+      n,
+      k: Math.round(Number(r.kcal)),
+      p: Math.round(Number(r.protein)),
+      c: Math.round(Number(r.carbs)),
+      f: Math.round(Number(r.fat))
+    });
+
+    save();
+
+  } catch (e) {
+    msg = "AI estimate failed: " + (e.message || "error");
+  }
+
+  busy = "";
+  render();
+}
 function wk(){return `<h1>Workouts</h1>${S.plan?`<div class="c"><h2>Start from your AI plan</h2><div class="r">${S.plan.days.map((d,i)=>`<button class="s" onclick="loadDay(${i})">${esc(d.day)}</button>`).join("")}</div></div>`:""}
 <div class="c"><h2>Current session</h2><label>Session name</label><input id="wn" value="${esc(window.wname||"")}" placeholder="Push day" oninput="window.wname=this.value">
 ${draft.map((e,i)=>`<div class="row"><div>${esc(e.n)}<div class="mu">${e.s} × ${e.r} @ ${e.w}kg</div></div><button class="x" onclick="draft.splice(${i},1);render()">✕</button></div>`).join("")}
@@ -91,13 +184,82 @@ return `<h1>AI coach</h1><div class="c"><h2>Your profile</h2><div class="g">
 <div class="c"><h2>Your numbers</h2><div class="g"><div><div class="mu">BMR</div><div class="big">${c.bmr}</div></div><div><div class="mu">TDEE</div><div class="big">${c.tdee}</div></div><div><div class="mu">Daily target</div><div class="big">${c.t}</div></div></div>
 <div class="mu" style="margin-top:6px">Macros: ${c.pr}g protein · ${c.ca}g carbs · ${c.fa}g fat</div></div>
 <div class="c"><h2>Generate workout plan</h2><label>Extra notes (injuries, preferences)</label><textarea id="pn" rows="2"></textarea>
-<div class="r" style="margin-top:8px"><button ${sample&&!busy?"":"disabled"} onclick="genPlan()">${busy=="plan"?"Building…":"✨ Build my plan"}</button></div><div class="mu">${sample?"":"AI unavailable in this view."} ${esc(msg)}</div></div>
-${S.plan?`<div class="c"><h2>${esc(S.plan.name)}</h2><div class="mu">${esc(S.plan.notes)}</div>${S.plan.days.map(d=>`<div class="row" style="display:block"><b>${esc(d.day)} – ${esc(d.focus)}</b><div>${d.exercises.map(e=>`<span class="tag">${esc(e.name)} ${esc(e.sets)}×${esc(e.reps)}</span>`).join("")}</div></div>`).join("")}</div>`:""}`}
+<div class="r" style="margin-top:8px"><button ${busy?"disabled":""} onclick="genPlan()">${busy=="plan"?"Building…":"✨ Build my plan"}</button></div><div class="mu">${esc(msg)}</div></div>${S.plan?`<div class="c"><h2>${esc(S.plan.name)}</h2><div class="mu">${esc(S.plan.notes)}</div>${S.plan.days.map(d=>`<div class="row" style="display:block"><b>${esc(d.day)} – ${esc(d.focus)}</b><div>${d.exercises.map(e=>`<span class="tag">${esc(e.name)} ${esc(e.sets)}×${esc(e.reps)}</span>`).join("")}</div></div>`).join("")}</div>`:""}`}
 function saveP(){const p=S.p;p.sex=$("ps").value;p.age=num("pa")||30;p.h=num("ph")||175;p.w=num("pw")||75;p.act=parseFloat($("pc").value);p.goal=$("pg").value;p.days=num("pd")||4;p.equip=$("pe").value;p.exp=$("px").value;save();render()}
-async function genPlan(){saveP();const p=S.p,c=calc();busy="plan";msg="";render();
-try{const r=await sample.json(`You are a certified strength coach. Build a ${p.days}-day/week weekly workout plan. Client: ${p.sex=="m"?"male":"female"}, ${p.age}y, ${p.h}cm, ${p.w}kg, goal: ${p.goal} (TDEE ${c.tdee} kcal, target ${c.t} kcal), experience: ${p.exp}, equipment: ${p.equip}. Notes: ${$("pn")?.value||"none"}. Include 4-7 exercises per day. Reply ONLY JSON: {"name":string,"notes":string (2 sentences on progression and cardio/nutrition fit),"days":[{"day":"Day 1","focus":string,"exercises":[{"name":string,"sets":number,"reps":string}]}]}`,{modelTier:"default"});
-if(!r.days?.length)throw new Error("Bad plan");S.plan=r;save()}catch(e){msg="Failed: "+(e.message||e.code||"error")}busy="";render()}
-function render(){const a=document.activeElement;if(a&&a.id&&/^p[a-z]$/.test(a.id)&&0)return;
+async function genPlan() {
+  saveP();
+
+  const p = S.p;
+  const c = calc();
+
+  busy = "plan";
+  msg = "";
+  render();
+
+  try {
+    const prompt = `
+You are a certified strength and hypertrophy coach.
+
+Build a ${p.days}-day weekly workout plan.
+
+CLIENT:
+Sex: ${p.sex === "m" ? "Male" : "Female"}
+Age: ${p.age}
+Height: ${p.h} cm
+Weight: ${p.w} kg
+Goal: ${p.goal}
+TDEE: ${c.tdee} kcal
+Target calories: ${c.t} kcal
+Experience: ${p.exp}
+Equipment: ${p.equip}
+Additional notes: ${$("pn")?.value || "None"}
+
+REQUIREMENTS:
+- Include exactly ${p.days} training days.
+- Include 4–7 exercises per day.
+- Use appropriate sets and rep ranges.
+- Match exercise selection to available equipment.
+- Include sensible progression and recovery advice.
+- Make the plan appropriate for the client's experience.
+
+Return ONLY valid JSON, without markdown:
+{
+  "name": "Plan name",
+  "notes": "Two sentences about progression, cardio and nutrition.",
+  "days": [
+    {
+      "day": "Day 1",
+      "focus": "Workout focus",
+      "exercises": [
+        {
+          "name": "Exercise name",
+          "sets": 3,
+          "reps": "8-12"
+        }
+      ]
+    }
+  ]
+}
+`;
+
+    const response = await askFitAI(prompt);
+    const r = extractAIJson(response);
+
+    if (!Array.isArray(r.days) || r.days.length !== Number(p.days)) {
+      throw new Error("The AI returned an incomplete workout plan.");
+    }
+
+    S.plan = r;
+    save();
+
+  } catch (e) {
+    msg = "Failed: " + (e.message || "error");
+  }
+
+  busy = "";
+  render();
+}
+function render(){
 $("app").innerHTML={home,food,wk,prog,coach}[tab]();
 $("nav").innerHTML=[["home","🏠","Home"],["food","🍎","Food"],["wk","🏋️","Workout"],["prog","📈","Progress"],["coach","✨","Coach"]].map(t=>`<button class="${tab==t[0]?"on":""}" onclick="go('${t[0]}')"><div style="font-size:18px">${t[1]}</div>${t[2]}</button>`).join("")}
 render();
